@@ -54,6 +54,10 @@ The protocol specification is being developed alongside the reference implementa
 
 Early versions should be considered experimental and may change as the protocol evolves.
 
+## Reference Implementation
+
+The Sinatra/SQLite reference server lives in [`src/`](src/). See [`src/README.md`](src/README.md) for quick-start, API, test, and Docker instructions.
+
 ## License
 
 See [LICENSE](LICENSE)
