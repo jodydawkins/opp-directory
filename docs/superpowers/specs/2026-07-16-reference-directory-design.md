@@ -49,7 +49,7 @@ A submitted registration must be a JSON object containing:
 - `signature.algorithm`, exactly `ed25519`
 - `signature.value`, a string accepted by the OPP verifier
 
-Unknown fields are allowed because the specification does not prohibit them and the OPP generic signing API authenticates them. Validation never removes, rewrites, or normalizes fields.
+Unknown registration fields are allowed because the specification does not prohibit them and the OPP generic signing API authenticates them. The `signature` object is limited to `algorithm` and `value` because the generic signing procedure excludes that object from its authenticated payload. Validation never removes, rewrites, or normalizes fields.
 
 After schema validation, the server derives the subject using `OPP::Subject.derive` and verifies the complete registration using `OPP::Signature.verify!` with the submitted public key.
 
@@ -58,12 +58,14 @@ After schema validation, the server derives the subject using `OPP::Subject.deri
 SQLite contains one `registrations` table:
 
 - `subject TEXT PRIMARY KEY`
-- `sequence INTEGER NOT NULL`
+- `sequence TEXT NOT NULL`, containing the canonical base-10 representation of the JSON integer
 - `document TEXT NOT NULL`
 
 The application stores the original HTTP request body in `document`. Retrieval returns that same string without reserializing it.
 
-Publishing uses a single SQLite upsert whose conflict update is conditional on the incoming sequence being greater than the stored sequence. This makes replay protection atomic. If the conditional upsert changes no row, the application returns `409 Conflict`.
+Publishing uses a single SQLite upsert whose conflict update compares canonical decimal sequence strings by length and then lexicographically. This preserves arbitrary-precision JSON integers and makes replay protection atomic. If the conditional upsert changes no row, the application returns `409 Conflict`.
+
+The reference server uses one SQLite connection and enables Sinatra's request lock, serializing requests within the process so a transaction cannot overlap another request on the shared connection.
 
 The database path comes from `DATABASE_PATH` and defaults to `db/opp-directory.sqlite3`. The application creates the database directory and table on startup.
 
@@ -91,6 +93,7 @@ Coverage includes:
 - `HEAD` for known and unknown subjects
 - unknown `GET`
 - malformed JSON and non-object JSON
+- duplicate JSON members at any depth
 - wrong content type
 - missing or invalid required fields
 - path/body subject mismatch
@@ -99,8 +102,10 @@ Coverage includes:
 - insecure or malformed `document_url`
 - invalid `issued_at`
 - negative or non-integer sequence
+- arbitrarily large sequence values
 - replayed and lower sequence rejection
 - preservation and authentication of unknown fields
+- rejection of extra, unauthenticated members inside `signature`
 
 The full test suite, style check, and container build are the completion checks. The container build may be skipped only when the environment cannot access the image registry, and that limitation must be reported.
 

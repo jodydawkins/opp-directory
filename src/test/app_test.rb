@@ -173,4 +173,39 @@ class AppTest < Minitest::Test
     put_registration(document)
     assert_equal 400, last_response.status
   end
+
+  def test_rejects_duplicate_json_members_at_any_depth
+    document = signed_registration(extension: { "enabled" => true })
+    body = JSON.generate(document)
+    nested_duplicate = body.sub('"extension":{"enabled":true}', '"extension":{"enabled":false,"enabled":true}')
+    put path(document["subject"]), nested_duplicate, "CONTENT_TYPE" => "application/json"
+    assert_equal 400, last_response.status
+
+    top_level_duplicate = body.sub("{", '{"type":"wrong",')
+    put path(document["subject"]), top_level_duplicate, "CONTENT_TYPE" => "application/json"
+    assert_equal 400, last_response.status
+  end
+
+  def test_compares_arbitrarily_large_sequence_numbers_exactly
+    sequence = 2**80
+    put_registration(signed_registration(sequence:))
+    assert_equal 201, last_response.status
+
+    body = put_registration(signed_registration(sequence: sequence + 1))
+    assert_equal 200, last_response.status
+    get path(OPP::Subject.derive(pair.public_key))
+    assert_equal body, last_response.body
+  end
+
+  def test_serializes_requests_using_the_single_sqlite_connection
+    assert OppDirectory.lock?
+  end
+
+  def test_rejects_unauthenticated_signature_members
+    document = signed_registration
+    document["signature"]["context"] = "not signed"
+
+    put_registration(document)
+    assert_equal 400, last_response.status
+  end
 end

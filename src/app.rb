@@ -21,6 +21,7 @@ class OppDirectory < Sinatra::Base
 
   configure do
     set :database_path, ENV.fetch("DATABASE_PATH", "db/opp-directory.sqlite3")
+    set :lock, true
     set :show_exceptions, false
   end
 
@@ -32,7 +33,7 @@ class OppDirectory < Sinatra::Base
         database.execute <<~SQL
           CREATE TABLE IF NOT EXISTS registrations (
             subject TEXT PRIMARY KEY,
-            sequence INTEGER NOT NULL,
+            sequence TEXT NOT NULL,
             document TEXT NOT NULL
           )
         SQL
@@ -88,7 +89,8 @@ class OppDirectory < Sinatra::Base
       end
 
       signature = document["signature"]
-      unless signature.is_a?(Hash) && signature["algorithm"] == "ed25519" && signature["value"].is_a?(String)
+      unless signature.is_a?(Hash) && signature.keys.sort == %w[algorithm value] &&
+          signature["algorithm"] == "ed25519" && signature["value"].is_a?(String)
         reject! 400, "signature must use ed25519"
       end
 
@@ -104,7 +106,7 @@ class OppDirectory < Sinatra::Base
   put "/:subject" do
     reject! 415, "content type must be application/json" unless request.media_type == "application/json"
     body = request.body.read
-    document = JSON.parse(body)
+    document = OPP::JSON.parse(body)
     validate_registration!(document, params[:subject])
 
     created = nil
@@ -112,18 +114,20 @@ class OppDirectory < Sinatra::Base
       created = database.get_first_value(
         "SELECT 1 FROM registrations WHERE subject = ?", document["subject"]
       ).nil?
-      database.execute <<~SQL, [document["subject"], document["sequence"], body]
+      database.execute <<~SQL, [document["subject"], document["sequence"].to_s, body]
         INSERT INTO registrations(subject, sequence, document) VALUES (?, ?, ?)
         ON CONFLICT(subject) DO UPDATE SET
           sequence = excluded.sequence,
           document = excluded.document
-        WHERE excluded.sequence > registrations.sequence
+        WHERE length(excluded.sequence) > length(registrations.sequence)
+           OR (length(excluded.sequence) = length(registrations.sequence)
+               AND excluded.sequence > registrations.sequence)
       SQL
       reject! 409, "sequence must be greater than the current sequence" if database.changes.zero?
     end
 
     status(created ? 201 : 200)
-  rescue JSON::ParserError
+  rescue OPP::ParseError, OPP::DuplicateMemberError
     halt_json 400, "invalid JSON"
   rescue RegistrationError => error
     halt_json error.status, error.message
