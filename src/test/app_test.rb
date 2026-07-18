@@ -6,15 +6,15 @@ require "minitest/autorun"
 require "opp"
 require "rack/test"
 require "time"
-require_relative "../app"
+require_relative "../lib/opp_directory/app"
 
 class AppTest < Minitest::Test
   include Rack::Test::Methods
 
-  def app = OppDirectory
+  def app = OppDirectory::App
 
   def setup
-    OppDirectory.database.execute("DELETE FROM registrations")
+    OppDirectory::App.database.execute("DELETE FROM registrations")
   end
 
   def path(subject)
@@ -61,7 +61,7 @@ class AppTest < Minitest::Test
 
   def test_get_and_head_return_a_stored_registration
     body = %({ "subject": "key:sha256:known" }\n)
-    OppDirectory.database.execute(
+    OppDirectory::App.database.execute(
       "INSERT INTO registrations(subject, sequence, document) VALUES (?, ?, ?)",
       ["key:sha256:known", 1, body]
     )
@@ -198,7 +198,7 @@ class AppTest < Minitest::Test
   end
 
   def test_serializes_requests_using_the_single_sqlite_connection
-    assert OppDirectory.lock?
+    assert OppDirectory::App.lock?
   end
 
   def test_rejects_unauthenticated_signature_members
