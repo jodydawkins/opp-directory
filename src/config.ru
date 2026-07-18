@@ -1,3 +1,3 @@
-require_relative "app"
+require_relative "lib/opp_directory/app"
 
-run OppDirectory
+run OppDirectory::App
