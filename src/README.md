@@ -21,6 +21,28 @@ Registrations are stored in `db/opp-directory.sqlite3`. Override the path with `
 
 The request `Content-Type` for `PUT` must be `application/json`. Subjects in URLs must be percent-encoded.
 
+## Registration CLI
+
+Key files contain one encoded OPP key. Surrounding whitespace is ignored.
+
+```sh
+bundle exec bin/opp-directory registration create \
+  --document-url https://example.com/.opp/presence.json \
+  --private-key private.key \
+  --public-key public.key \
+  --sequence 1 \
+  --output registration.json
+
+bundle exec bin/opp-directory registration verify registration.json
+
+bundle exec bin/opp-directory registration publish registration.json \
+  --directory http://localhost:9292
+
+bundle exec bin/opp-directory registration fetch key:sha256:... \
+  --directory http://localhost:9292 \
+  --output registration.json
+```
+
 ## Test
 
 ```sh

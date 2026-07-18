@@ -4,7 +4,9 @@ RUN apk add --no-cache build-base git sqlite-dev
 WORKDIR /app
 COPY Gemfile Gemfile.lock ./
 RUN bundle config set without test && bundle install
-COPY app.rb config.ru ./
+COPY config.ru ./
+COPY lib ./lib
+COPY bin ./bin
 
 ENV DATABASE_PATH=/data/opp-directory.sqlite3
 VOLUME /data
