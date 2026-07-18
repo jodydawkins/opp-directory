@@ -10,7 +10,8 @@ primary_region = 'lax'
   dockerfile = 'Dockerfile'
 
 [env]
-  DATABASE_PATH = '/data/opp-directory.sqlite3'
+  APP_ENV = "production"
+  DATABASE_PATH = "/data/opp-directory.sqlite3"
 
 [[mounts]]
   source = 'opp_directory_data'
