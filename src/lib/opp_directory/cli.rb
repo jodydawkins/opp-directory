@@ -88,8 +88,11 @@ module OppDirectory
       options = parse_directory_options(output: true)
       raise Error, "fetch requires one SUBJECT" unless @argv.length == 1
 
-      request = Net::HTTP::Get.new(registration_uri(options[:directory], @argv.first))
+      subject = @argv.first
+      request = Net::HTTP::Get.new(registration_uri(options[:directory], subject))
       body = perform(request).body
+      document = Registration.parse(body)
+      Registration.verify!(document, expected_subject: subject)
       if options[:output]
         File.binwrite(options[:output], body)
         @out.puts "fetched registration to #{options[:output]}"

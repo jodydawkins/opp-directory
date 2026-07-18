@@ -18,6 +18,15 @@ class CLITest < Minitest::Test
     OppDirectory::CLI.run(arguments, out: @out, err: @err)
   end
 
+  def signed_registration
+    OppDirectory::Registration.create(
+      document_url: "https://example.com/opp.json",
+      private_key: @pair.private_key,
+      public_key: @pair.public_key,
+      sequence: 1
+    )
+  end
+
   def with_http_peer(status: "200 OK", response_body: "{}")
     server = TCPServer.new("127.0.0.1", 0)
     requests = Queue.new
@@ -134,13 +143,15 @@ class CLITest < Minitest::Test
   end
 
   def test_fetch_writes_exact_bytes_to_stdout_or_file
-    subject = "key:sha256:example"
-    body = %({ "subject": "#{subject}" }\n)
+    document = signed_registration
+    subject = document["subject"]
+    body = JSON.pretty_generate(document) + "\n"
 
     with_http_peer(response_body: body) do |url, requests|
       assert_equal 0, run_cli("registration", "fetch", subject, "--directory", url)
       assert_equal body, @out.string
-      assert_match("GET /directory/key%3Asha256%3Aexample HTTP/1.1", requests.pop.first)
+      encoded_subject = subject.gsub(":", "%3A")
+      assert_match("GET /directory/#{encoded_subject} HTTP/1.1", requests.pop.first)
     end
 
     @out.truncate(0)
@@ -155,6 +166,50 @@ class CLITest < Minitest::Test
       assert_equal body, File.binread(output)
       assert_includes @out.string, output
     end
+  end
+
+  def test_fetch_rejects_malformed_json_without_writing_stdout
+    with_http_peer(response_body: "{") do |url, _requests|
+      assert_equal 1, run_cli(
+        "registration", "fetch", "key:sha256:expected", "--directory", url
+      )
+    end
+
+    assert_empty @out.string
+    assert_match(/invalid JSON/, @err.string)
+  end
+
+  def test_fetch_rejects_an_invalid_signature_without_replacing_output
+    document = signed_registration
+    document["signature"]["value"] = "A" * 86
+    body = JSON.generate(document)
+
+    Dir.mktmpdir do |directory|
+      output = File.join(directory, "registration.json")
+      File.binwrite(output, "existing")
+      with_http_peer(response_body: body) do |url, _requests|
+        assert_equal 1, run_cli(
+          "registration", "fetch", document["subject"],
+          "--directory", url, "--output", output
+        )
+      end
+      assert_equal "existing", File.binread(output)
+    end
+
+    assert_match(/verification failed/, @err.string)
+  end
+
+  def test_fetch_rejects_a_registration_for_another_subject
+    body = JSON.generate(signed_registration)
+
+    with_http_peer(response_body: body) do |url, _requests|
+      assert_equal 1, run_cli(
+        "registration", "fetch", "key:sha256:different", "--directory", url
+      )
+    end
+
+    assert_empty @out.string
+    assert_match(/subject does not match path/, @err.string)
   end
 
   def test_http_failure_returns_one_and_reports_status
