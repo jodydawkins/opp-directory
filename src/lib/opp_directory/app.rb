@@ -85,6 +85,11 @@ module OppDirectory
       halt_json error.status, error.message
     end
 
+    get "/health" do
+      content_type :json
+      { status: "ok" }.to_json
+    end
+
     get "/:subject" do
       document = registration(params[:subject]) or halt 404
       content_type :json
